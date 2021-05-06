@@ -1,6 +1,16 @@
 // Require `checkUsernameFree`, `checkUsernameExists` and `checkPasswordLength`
 // middleware functions from `auth-middleware.js`. You will need them here!
 
+const express = require("express")
+
+const bcrypt = require("bcryptjs")
+
+const Users = require("../users/users-model");
+
+const { checkPasswordLength, checkUsernameExists, checkUsernameFree } = require("./auth-middleware.js");
+
+const router = express.Router()
+
 
 /**
   1 [POST] /api/auth/register { "username": "sue", "password": "1234" }
@@ -25,6 +35,23 @@
   }
  */
 
+router.post("/api/auth/register", checkUsernameFree(), checkPasswordLength(), async (req, res, next) => {
+  try {
+    const { username, password } = req.body
+
+    const newUser = await Users.add({
+      username,
+      //Create a hash for the password created by the user
+      password: await bcrypt.hash(password, 14) // 14 is a randomly chosen number. Pick a number so that account is processed in a second
+    })
+
+    res.status(200).json(newUser)
+
+  } catch (err) {
+    next(err)
+  }
+})
+
 
 /**
   2 [POST] /api/auth/login { "username": "sue", "password": "1234" }
@@ -41,6 +68,17 @@
     "message": "Invalid credentials"
   }
  */
+router.post("/api/auth/login", checkUsernameExists(), (req, res, next) => {
+  const user = req.user;
+
+  //Create a new session for the user
+  req.session.user = user;
+
+  res.json({
+    message: `Welcome ${user.username}!`,
+  })
+
+})
 
 
 /**
@@ -59,5 +97,31 @@
   }
  */
 
- 
+router.get("/api/auth/logout", async (req, res, next) => {
+  try {
+    //If a session does not exist
+    if (!req.session || !req.session.user) {
+      return res.status(200).json({
+        message: "no session",
+      })
+    } else {
+      req.session.destroy((err) => {
+        if (err) {
+          next(err)
+        } else {
+          res.status(200).json({
+            message: "logged out",
+          })
+        }
+      })
+    }
+
+  } catch (err) {
+    next(err)
+  }
+})
+
+
 // Don't forget to add the router to the `exports` object so it can be required in other modules
+
+module.exports = router
